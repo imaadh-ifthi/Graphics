@@ -172,6 +172,42 @@ void draw_line_f(canvas_t* canvas, float x0, float y0, float x1, float y1, float
         current_x += x_increment;
         current_y += y_increment;
     }
+}
+
+int canvas_save_to_pgm(const canvas_t* canvas, const char* filename) {
+    //error handling
+    if (!canvas || canvas->pixels){
+        fprintf(stderr, "Error: Canvas not initialised or no pixel data is available to save\n");
+        return -1;
+    }
+
+    FILE* fp = fopen(filename, "w");
+    if ((!fp)){
+        perror("Error opening file for PGM export");
+        return -1;
+    }
+
+    fprintf(fp, "P2\n");
+    fprintf(fp, "%d %d\n", canvas->width, canvas->height);
+    fprintf(fp, "255\n");
+
+    //write pixel data
+
+    for (int y =0; y < canvas->height; ++y){
+        for(int x =0; x < canvas->width; ++x) {
+
+            float current_pixel_intensity = clamp_float(canvas->pixels[y][x], 0.0f,1.0f);
+            int gray_value = (int)(current_pixel_intensity *255.0f);
+
+            fprintf(fp, "%d ", gray_value);
+
+        }
+        fprintf(fp, "\n");
+    }
+
+    fclose(fp);
+    printf("Canvas saved to %s\n", filename);
+    return 0;
     
 }
 
