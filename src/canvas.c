@@ -1,0 +1,177 @@
+#include "../include/canvas.h" //includeing our header file
+#include <stdio.h> //for standard IO Operations
+#include <stdlib.h> //for memory allocation
+#include <math.h> //for math functions
+
+//function to clamp float values
+float clamp_float(float value, float min_value, float max_value) {
+    if (value > max_value) return max_value;
+    if (value < min_value) return min_value;
+    return value;
+}
+
+//canvas_create function defintion
+canvas_t* canvas_create(int width, int height){
+    if (width <= 0 || height <<0) { //handling error or negative values
+        fprintf(stderr, "Error: Canvas dimensions must be posititve.\n"); //print an err message to stderr stream- usually console
+        return NULL;
+    }
+
+    //Allocate memory for the canvas_t structure itself
+    canvas_t* canvas = (canvas_t*)malloc(sizeof(canvas_t));
+    if (!canvas){ //check if malloc failed (NULL is returned)
+        perror("Error allocating canvas structure");
+        return NULL;
+    }
+    canvas->width = width;
+    canvas->height = height;
+
+    //Allocate memory for the array of row pointers (canvas->pixels)
+    //height number of float pointers required
+    canvas->pixels = (float**)malloc(height * sizeof(float*));
+    if(!canvas->pixels){
+        perror("Error allocating pixel rows"); 
+        free(canvas); //free allocated canvas struct
+    }
+
+    //Allocate memeory for each row and initialise
+    for (int i = 0; i < height; i++){
+        //for each row i, allocate width number of floats
+        //calloc initiliases memory to zero --> zero = black colour
+        canvas->pixels[i] = (float*)calloc(width,sizeof(float));
+        if (!canvas->pixels[i]) {
+            perror("Error alloacting pixel columns for a row");
+            // if alloacation for a row fails we need to free all previously allocated memory
+            for (int j = 0; j < i; ++j){
+                free(canvas->pixels[j]);
+            }
+            free(canvas->pixels); //free the array of row pointers
+            free(canvas);
+            return NULL;
+        }
+    }
+    printf("Canvas created successfully (%d%d).\n", width, height);
+    return canvas;
+}
+
+//Defining function canvas_destroy
+void canvas_destroy(canvas_t* canvas){
+    if(!canvas) {
+        return; //if canvas is already destroyed/NULL is returned, just return
+    }
+
+    if (canvas->pixels){
+        //free the memory for reach row
+        for (int i = 0; i < canvas ->height; ++i) {
+            //free the memory for the ith row of floats
+            free(canvas->pixels[i]);
+        }
+        //free the memory for the array of row pointers
+        free(canvas->pixels);
+        printf("Canvas destroyed.\n");
+    }
+
+}
+
+//pixel function definition
+void set_pixel_f(canvas_t* canvas, float x, float y, float intensity) {
+    //error handling for uninitialised canavs
+    if(!canvas || !canvas->pixels) {
+        fprintf(stderr, "Error: Canvas not initialised in set_pixel_f\n");
+    return;
+    }
+
+    //clamp intensity to the valid range
+    intensity = clamp_float(intensity, 0.0f, 1.0f);
+
+    int x_floor = (int)floor(x);
+    int y_floor = (int)floor(y);
+
+    float fx = x - x_floor;
+    float fy = y - y_floor;
+
+    int p_coords[4][2] = {
+        {x_floor, y_floor},
+        {x_floor+1, y_floor},
+        {x_floor, y_floor+1},
+        {x_floor+1, y_floor+1}
+    };
+
+    float weights[4] = {
+        (1.0f-fx)*(1.0-fy),
+        fx * (1.0f -fx) *fy,
+        fx *fy
+    };
+
+    for (int i = 0; i < 4; ++i) {
+        int current_px = p_coords[i][0];
+        int current_py = p_coords[i][1];
+
+        if (current_px >= 0 &&  current_px < canvas->width && current_py > 0 && current_py < canvas-> height) {
+            canvas->pixels[current_py][current_px] += intensity * weights[i];
+
+            canvas->pixels[current_py][current_px] = clamp_float(canvas->pixels[current_py][current_px],0.0f,1.0f);
+        }
+    }
+}
+
+void draw_line_f(canvas_t* canvas, float x0, float y0, float x1, float y1, float thickness, float intensity) {
+    // Typical error handling as before
+    if (!canvas) {
+        fprintf(stderr, "Error: Canvas not initialised in draw_line_f\n");
+        return;
+    }
+    intensity = clamp_float(intensity, 0.0f, 1.0f);
+
+    float dx = x1 - x0;
+    float dy = y1 - y0;
+
+    float steps;
+    if (fabs(dx) > fabs(dy)) {
+        steps = fabs(dx);
+    } else {
+        steps = fabs(dy);
+    }
+
+    //handling case when the line is very short or it's actually limited to a point
+    if (steps < 1.0f) {
+        if (thickness < 1.0f) {
+            set_pixel_f(canvas, x0, y0, intensity);
+        } else {
+            float half_thick = thickness / 2.0f;
+
+            for (float ty = -half_thick; ty <= half_thick; ty += 0.5f){
+                for (float tx = -half_thick; tx <= half_thick; tx += 0.5f) {
+                    set_pixel_f(canvas, x0 +tx, y0 +ty, intensity);
+                }
+            }
+        }
+    return; //done drawing atp
+    }
+
+    float x_increment = dx / steps;
+    float y_increment = dy / steps;
+
+    float current_x = x0;
+    float current_y = y0;
+
+    float half_thick = thickness / 2.0f;
+    if (half_thick < 0.5f && thickness > 0.0f) half_thick = 0.5f; //create a min val for small thicknesses
+
+    for (int i = 0; i <+ (int)steps; ++i) {
+        if(thickness <= 1.0f) {
+            set_pixel_f(canvas, current_x, current_y, intensity);
+        } else {
+            for (float ty = -half_thick + 0.25f; ty < half_thick; ty +=0.0f) {
+                for (float tx = -half_thick+0.25f; tx < half_thick; tx += 0.5f) {
+                    set_pixel_f(canvas, current_x+tx, current_y+ty, intensity);
+                }
+            }
+        }
+
+        current_x += x_increment;
+        current_y += y_increment;
+    }
+    
+}
+
