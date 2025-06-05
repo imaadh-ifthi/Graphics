@@ -1,12 +1,14 @@
 #ifndef CANVAS_H //including guard to make sure another canvas_h file is not defined and if so then proceed
 #define CANVAS_H //defining canvas
 
-typedef struct canvas_t  //defining a struct to carry info about the canvas
+typedef struct  //defining a struct to carry info about the canvas
 {
     int width;
     int height;
     float **pixels;
-};
+} canvas_t;
+
+//prototyping some functions
 
 canvas_t* canvas_create(int width, int height);
 
