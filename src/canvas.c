@@ -12,7 +12,7 @@ float clamp_float(float value, float min_value, float max_value) {
 
 //canvas_create function defintion
 canvas_t* canvas_create(int width, int height){
-    if (width <= 0 || height <<0) { //handling error or negative values
+    if (width <= 0 || height <=0) { //handling error or negative values
         fprintf(stderr, "Error: Canvas dimensions must be posititve.\n"); //print an err message to stderr stream- usually console
         return NULL;
     }
@@ -32,6 +32,7 @@ canvas_t* canvas_create(int width, int height){
     if(!canvas->pixels){
         perror("Error allocating pixel rows"); 
         free(canvas); //free allocated canvas struct
+        return NULL;
     }
 
     //Allocate memeory for each row and initialise
@@ -50,7 +51,7 @@ canvas_t* canvas_create(int width, int height){
             return NULL;
         }
     }
-    printf("Canvas created successfully (%d%d).\n", width, height);
+    printf("Canvas created successfully (%dx%d).\n", width, height);
     return canvas;
 }
 
@@ -68,8 +69,10 @@ void canvas_destroy(canvas_t* canvas){
         }
         //free the memory for the array of row pointers
         free(canvas->pixels);
-        printf("Canvas destroyed.\n");
+        
     }
+    free(canvas);
+    printf("Canvas destroyed.\n");
 
 }
 
@@ -99,7 +102,8 @@ void set_pixel_f(canvas_t* canvas, float x, float y, float intensity) {
 
     float weights[4] = {
         (1.0f-fx)*(1.0-fy),
-        fx * (1.0f -fx) *fy,
+        fx * (1.0f -fx),
+        (1.0f - fx) * fy,
         fx *fy
     };
 
@@ -107,7 +111,7 @@ void set_pixel_f(canvas_t* canvas, float x, float y, float intensity) {
         int current_px = p_coords[i][0];
         int current_py = p_coords[i][1];
 
-        if (current_px >= 0 &&  current_px < canvas->width && current_py > 0 && current_py < canvas-> height) {
+        if (current_px >= 0 &&  current_px < canvas->width && current_py >= 0 && current_py < canvas-> height) {
             canvas->pixels[current_py][current_px] += intensity * weights[i];
 
             canvas->pixels[current_py][current_px] = clamp_float(canvas->pixels[current_py][current_px],0.0f,1.0f);
@@ -158,11 +162,11 @@ void draw_line_f(canvas_t* canvas, float x0, float y0, float x1, float y1, float
     float half_thick = thickness / 2.0f;
     if (half_thick < 0.5f && thickness > 0.0f) half_thick = 0.5f; //create a min val for small thicknesses
 
-    for (int i = 0; i <+ (int)steps; ++i) {
+    for (int i = 0; i <= (int)steps; ++i) {
         if(thickness <= 1.0f) {
             set_pixel_f(canvas, current_x, current_y, intensity);
         } else {
-            for (float ty = -half_thick + 0.25f; ty < half_thick; ty +=0.0f) {
+            for (float ty = -half_thick + 0.25f; ty < half_thick; ty +=0.5f) {
                 for (float tx = -half_thick+0.25f; tx < half_thick; tx += 0.5f) {
                     set_pixel_f(canvas, current_x+tx, current_y+ty, intensity);
                 }
@@ -176,7 +180,7 @@ void draw_line_f(canvas_t* canvas, float x0, float y0, float x1, float y1, float
 
 int canvas_save_to_pgm(const canvas_t* canvas, const char* filename) {
     //error handling
-    if (!canvas || canvas->pixels){
+    if (!canvas || !canvas->pixels){
         fprintf(stderr, "Error: Canvas not initialised or no pixel data is available to save\n");
         return -1;
     }
