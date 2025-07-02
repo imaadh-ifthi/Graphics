@@ -109,8 +109,8 @@ help:
 # Phony targets (targets that don't represent actual files)
 .PHONY: all task1 task2 library run-task1 run-task2 clean help
 
-# Usage examples:
+# Usage examples for Task 2:
 # make              # Build everything
-# make task2        # Build only Task 2 test
-# make run-task2    # Build and run Task 2 test
 # make clean        # Clean build files
+# ./build/test_math # Run the Task 2
+# Animate crreated 60 .pgm files in frames dir.
