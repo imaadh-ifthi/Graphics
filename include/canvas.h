@@ -8,6 +8,8 @@ typedef struct  //defining a struct to carry info about the canvas
     float **pixels;
 } canvas_t;
 
+void canvas_clear(canvas_t* canvas, float intensity);
+
 //prototyping some functions
 
 canvas_t* canvas_create(int width, int height);

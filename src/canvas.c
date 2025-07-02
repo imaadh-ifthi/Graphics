@@ -13,7 +13,7 @@ float clamp_float(float value, float min_value, float max_value) {
 //canvas_create function defintion
 canvas_t* canvas_create(int width, int height){
     if (width <= 0 || height <=0) { //handling error or negative values
-        fprintf(stderr, "Error: Canvas dimensions must be posititve.\n"); //print an err message to stderr stream- usually console
+        fprintf(stderr, "Error: Canvas dimensions must be positive.\n"); //print an err message to stderr stream- usually console
         return NULL;
     }
 
@@ -35,14 +35,14 @@ canvas_t* canvas_create(int width, int height){
         return NULL;
     }
 
-    //Allocate memeory for each row and initialise
+    //Allocate memory for each row and initialise
     for (int i = 0; i < height; i++){
         //for each row i, allocate width number of floats
-        //calloc initiliases memory to zero --> zero = black colour
+        //calloc initializes memory to zero --> zero = black colour
         canvas->pixels[i] = (float*)calloc(width,sizeof(float));
         if (!canvas->pixels[i]) {
-            perror("Error alloacting pixel columns for a row");
-            // if alloacation for a row fails we need to free all previously allocated memory
+            perror("Error allocating pixel columns for a row");
+            // if allocation for a row fails we need to free all previously allocated memory
             for (int j = 0; j < i; ++j){
                 free(canvas->pixels[j]);
             }
@@ -115,6 +115,16 @@ void set_pixel_f(canvas_t* canvas, float x, float y, float intensity) {
             canvas->pixels[current_py][current_px] += intensity * weights[i];
 
             canvas->pixels[current_py][current_px] = clamp_float(canvas->pixels[current_py][current_px],0.0f,1.0f);
+        }
+    }
+}
+
+void canvas_clear(canvas_t* canvas, float intensity) {
+    if (!canvas || !canvas->pixels) return;
+    float clamped_intensity = clamp_float(intensity, 0.0f, 1.0f);
+    for (int y = 0; y < canvas->height; ++y) {
+        for (int x = 0; x < canvas->width; ++x) {
+            canvas->pixels[y][x] = clamped_intensity;
         }
     }
 }
