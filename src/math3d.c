@@ -1,6 +1,7 @@
 // math3d.c
 #include "math3d.h"
 #include <math.h>
+#include <stdbool.h>
 
 // Create a vec3 from Cartesian coordinates
 vec3_t vec3_create(float x, float y, float z) {
@@ -124,24 +125,49 @@ mat4_t mat4_frustum_asymmetric(float left, float right, float bottom, float top,
 }
 
 // Matrix multiplication
+// Matrix multiplication: result = A * B; modified
 mat4_t mat4_multiply(const mat4_t* a, const mat4_t* b) {
-    mat4_t result = {0};
-    for (int row = 0; row < 4; ++row) {
-        for (int col = 0; col < 4; ++col) {
-            for (int k = 0; k < 4; ++k) {
-                result.m[col * 4 + row] += a->m[k * 4 + row] * b->m[col * 4 + k];
+    mat4_t result = {0}; // Initialize all to zero
+    for (int col = 0; col < 4; ++col) { // Iterate columns of result (and B)
+        for (int row = 0; row < 4; ++row) { // Iterate rows of result (and A)
+            float sum = 0.0f;
+            for (int k = 0; k < 4; ++k) { // Dot product
+                // a->m[k * 4 + row] is A[row][k]
+                // b->m[col * 4 + k] is B[k][col]
+                sum += a->m[k * 4 + row] * b->m[col * 4 + k];
             }
+            result.m[col * 4 + row] = sum;
         }
     }
     return result;
 }
 
 // Transform point with matrix
+// In src/math3d.c
+// Transform point with matrix (now handles homogeneous coordinates)
 vec3_t mat4_transform_point(const mat4_t* m, const vec3_t* point) {
     vec3_t result;
-    result.x = m->m[0] * point->x + m->m[4] * point->y + m->m[8] * point->z + m->m[12];
-    result.y = m->m[1] * point->x + m->m[5] * point->y + m->m[9] * point->z + m->m[13];
-    result.z = m->m[2] * point->x + m->m[6] * point->y + m->m[10] * point->z + m->m[14];
-    vec3_update_spherical(&result);
+    // Calculate the homogeneous coordinates
+    float x_hom = m->m[0] * point->x + m->m[4] * point->y + m->m[8] * point->z + m->m[12];
+    float y_hom = m->m[1] * point->x + m->m[5] * point->y + m->m[9] * point->z + m->m[13];
+    float z_hom = m->m[2] * point->x + m->m[6] * point->y + m->m[10] * point->z + m->m[14];
+    float w_hom = m->m[3] * point->x + m->m[7] * point->y + m->m[11] * point->z + m->m[15]; // Get W component!
+
+    // Perform perspective division if w_hom is not zero
+    if (w_hom != 0.0f) {
+        result.x = x_hom / w_hom;
+        result.y = y_hom / w_hom;
+        result.z = z_hom / w_hom; // Keep z for depth buffer or sorting later
+    } else {
+        // Handle case where w is zero (point at infinity, or error)
+        // For now, set to zero or a large value to avoid NaNs/Infs
+        result.x = 0.0f;
+        result.y = 0.0f;
+        result.z = 0.0f;
+    }
+
+    // Do NOT call vec3_update_spherical here. This is a 3D point in transformed Cartesian space.
+    // The spherical coordinates are irrelevant for the rendering pipeline here.
+    // Remove: vec3_update_spherical(&result);
     return result;
 }

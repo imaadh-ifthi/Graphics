@@ -11,16 +11,16 @@ TESTS_DIR = tests
 BUILD_DIR = build
 
 # Source files for the library (now includes math3d)
-LIB_SRCS = $(SRC_DIR)/canvas.c $(SRC_DIR)/math3d.c
+LIB_SRCS = $(SRC_DIR)/canvas.c $(SRC_DIR)/math3d.c $(SRC_DIR)/renderer.c
 # Object files for the library
 LIB_OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(LIB_SRCS))
 
 # Demo source file (Task 1 demo)
-DEMO_SRC = $(DEMO_DIR)/main.c
+DEMO_SRC = $(DEMO_DIR)/main2.c
 # Demo object file
 DEMO_OBJ = $(patsubst $(DEMO_DIR)/%.c,$(BUILD_DIR)/%.o,$(DEMO_SRC))
 # Demo executable name
-DEMO_EXEC = $(BUILD_DIR)/stage1_demo
+DEMO_EXEC = $(BUILD_DIR)/stage3_demo
 
 # Test source files
 TEST_MATH_SRC = $(TESTS_DIR)/test_math.c
@@ -76,12 +76,16 @@ task1: $(DEMO_EXEC)
 task2: $(TEST_MATH_EXEC)
 	@echo "Task 2 math test ready: $(TEST_MATH_EXEC)"
 
+task3: $(DEMO_EXEC) # New target for Task 3
+    @echo "Task 3 demo ready: $(DEMO_EXEC)"
+
 library: $(LIB_ARCHIVE)
 	@echo "Static library ready: $(LIB_ARCHIVE)"
 
 # Run targets
 run-task1: $(DEMO_EXEC)
-	@echo "Running Task 1 demo..."
+	@echo "Running Task 3 demo..."
+	mkdir -p frames #
 	./$(DEMO_EXEC)
 
 run-task2: $(TEST_MATH_EXEC)
