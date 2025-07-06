@@ -45,7 +45,6 @@ mat4_t animation_update_model_matrix(animation_state_t* state, int frame) {
     // Ensure current_time wraps around for continuous animation
     float animation_t_offset = fmodf(state->current_time * state->orbit_speed_multiplier, 1.0f);
 
-    vec3_t current_position;
     // Example: Using Bezier for a specific object's orbit
     // This logic is directly from your main2.c for planet 1 (or sun rotation for example)
     // You will need to pass appropriate control points to this function or the state.
@@ -129,6 +128,7 @@ void run_animation(
 
     for (int frame = 0; frame < num_frames; ++frame) {
         canvas_clear(my_canvas, 0.0f); // Clear canvas for each frame
+        canvas_clear_depth(my_canvas, 1.0f); // Clear depth buffer for each frame
 
         // --- Sun Animation ---
         mat4_t sun_model_matrix = mat4_identity();
@@ -136,7 +136,7 @@ void run_animation(
         mat4_t sun_rotation = mat4_rotate_xyz(0.0f, sun_angle_rad, 0.0f);
         sun_model_matrix = mat4_multiply(&sun_model_matrix, &sun_rotation);
         // Render Sun
-        render_wireframe(my_canvas, sun_model, sun_model_matrix, view_matrix, projection_matrix, main_light);
+        render_wireframe(my_canvas, sun_model, sun_model_matrix, view_matrix, projection_matrix, main_light, camera_pos);
 
 
         // --- Planet 1 Animation ---
@@ -160,7 +160,7 @@ void run_animation(
         mat4_t planet1_local_rotation = mat4_rotate_xyz(0.0f, planet1_spin_angle, 0.0f);
         planet1_model_matrix = mat4_multiply(&planet1_model_matrix, &planet1_local_rotation);
         
-        render_wireframe(my_canvas, planet_model_1, planet1_model_matrix, view_matrix, projection_matrix, main_light);
+        render_wireframe(my_canvas, planet_model_1, planet1_model_matrix, view_matrix, projection_matrix, main_light, camera_pos);
 
 
         // --- Planet 2 Animation ---
@@ -185,7 +185,7 @@ void run_animation(
         mat4_t planet2_local_rotation = mat4_rotate_xyz(0.0f, planet2_spin_angle, 0.0f);
         planet2_model_matrix = mat4_multiply(&planet2_model_matrix, &planet2_local_rotation);
         
-        render_wireframe(my_canvas, planet_model_2, planet2_model_matrix, view_matrix, projection_matrix, main_light);
+        render_wireframe(my_canvas, planet_model_2, planet2_model_matrix, view_matrix, projection_matrix, main_light, camera_pos);
 
         // Save frame to PGM
         char filename[256];

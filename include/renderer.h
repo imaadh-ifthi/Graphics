@@ -3,7 +3,10 @@
 
 #include "canvas.h"
 #include "math3d.h"
-#include "lighting.h" // NEW: Include lighting.h for light_source_t
+#include "lighting.h" 
+
+// Add/Adjust AMBIENT_LIGHT here for overall line intensity
+#define AMBIENT_LIGHT 0.3f 
 
 // A simple struct to represent an edge connecting two vertices by their indices
 typedef struct {
@@ -36,14 +39,8 @@ typedef struct {
  * @param view_matrix The view transformation matrix.
  * @param projection_matrix The projection matrix.
  * @param light A pointer to the light source for lighting calculations.
+ * @param camera_position The position of the camera in world space, used for view direction.
  */
-void render_wireframe(
-    canvas_t* canvas,
-    const model_t* model,
-    mat4_t model_matrix,
-    mat4_t view_matrix,
-    mat4_t projection_matrix,
-    const light_source_t* light // NEW: Pass light source for basic lighting
-);
+void render_wireframe(canvas_t* canvas, const model_t* model, mat4_t model_matrix, mat4_t view_matrix, mat4_t projection_matrix, const light_source_t* light, vec3_t camera_position);
 
 #endif // RENDERER_H
