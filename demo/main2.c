@@ -7,9 +7,10 @@
 #include "canvas.h"
 #include "math3d.h" // Your math3d.h is crucial here
 #include "renderer.h"
+#include "lighting.h" // Already present in your version, good!
+#include "animation.h"
 
 // Define a common constant for converting degrees to radians
-// (Already defined in math3d.h, but no harm in keeping this safeguard)
 #ifndef DEG_TO_RAD
 #define DEG_TO_RAD (PI / 180.0f) // Use PI from math3d.h
 #endif
@@ -17,147 +18,90 @@
 // --- Model Utility Functions ---
 
 // Function to generate a simple cube model for testing
-// model_t* generate_cube(void) {
-//     model_t* cube = (model_t*)malloc(sizeof(model_t));
-//     if (!cube) {
-//         perror("Failed to allocate model_t for cube");
-//         return NULL;
-//     }
-
-//     cube->num_vertices = 8;
-//     cube->vertices = (vec3_t*)malloc(cube->num_vertices * sizeof(vec3_t));
-//     if (!cube->vertices) {
-//         perror("Failed to allocate vertices for cube");
-//         free(cube);
-//         return NULL;
-//     }
-
-//     // Define vertices of a unit cube centered at origin
-//     cube->vertices[0] = vec3_create(-0.5f, -0.5f, -0.5f); // 0: FBL (Front Bottom Left)
-//     cube->vertices[1] = vec3_create( 0.5f, -0.5f, -0.5f); // 1: FBR (Front Bottom Right)
-//     cube->vertices[2] = vec3_create( 0.5f,  0.5f, -0.5f); // 2: FTR (Front Top Right)
-//     cube->vertices[3] = vec3_create(-0.5f,  0.5f, -0.5f); // 3: FTL (Front Top Left)
-//     cube->vertices[4] = vec3_create(-0.5f, -0.5f,  0.5f); // 4: BBL (Back Bottom Left)
-//     cube->vertices[5] = vec3_create( 0.5f, -0.5f,  0.5f); // 5: BBR (Back Bottom Right)
-//     cube->vertices[6] = vec3_create( 0.5f,  0.5f,  0.5f); // 6: BTR (Back Top Right)
-//     cube->vertices[7] = vec3_create(-0.5f,  0.5f,  0.5f); // 7: BTL (Back Top Left)
-
-//     cube->num_edges = 12;
-//     cube->edges = (edge_t*)malloc(cube->num_edges * sizeof(edge_t));
-//     if (!cube->edges) {
-//         perror("Failed to allocate edges for cube");
-//         free(cube->vertices);
-//         free(cube);
-//         return NULL;
-//     }
-
-//     // Define edges (pairs of vertex indices)
-//     // Front face
-//     cube->edges[0] = (edge_t){0, 1};
-//     cube->edges[1] = (edge_t){1, 2};
-//     cube->edges[2] = (edge_t){2, 3};
-//     cube->edges[3] = (edge_t){3, 0};
-//     // Back face
-//     cube->edges[4] = (edge_t){4, 5};
-//     cube->edges[5] = (edge_t){5, 6};
-//     cube->edges[6] = (edge_t){6, 7};
-//     cube->edges[7] = (edge_t){7, 4};
-//     // Connecting edges
-//     cube->edges[8] = (edge_t){0, 4};
-//     cube->edges[9] = (edge_t){1, 5};
-//     cube->edges[10] = (edge_t){2, 6};
-//     cube->edges[11] = (edge_t){3, 7};
-
-//     printf("Generated cube model with %d vertices and %d edges.\n", cube->num_vertices, cube->num_edges);
-//     return cube;
-// }
-
-// Function to generate a simple soccer ball (icosahedron-based) model for testing
-model_t* generate_soccer_ball(void) {
-    model_t* ball = (model_t*)malloc(sizeof(model_t));
-    if (!ball) {
-        perror("Failed to allocate model_t for soccer ball");
+model_t* generate_cube(float size) {
+    model_t* cube = (model_t*)malloc(sizeof(model_t));
+    if (!cube) {
+        perror("Failed to allocate model_t for cube");
         return NULL;
     }
 
-    // Vertices of a regular Icosahedron (20 faces, 12 vertices, 30 edges)
-    // Scaled to a reasonable size, e.g., radius 0.5
-    // These are derived from a golden ratio (phi) construction
-    float phi = (1.0f + sqrtf(5.0f)) / 2.0f; // Golden ratio
-    float r = 0.5f; // Radius, adjust as needed for visibility
-    float a = r;
-    float b = r / phi;
-
-    ball->num_vertices = 12;
-    ball->vertices = (vec3_t*)malloc(ball->num_vertices * sizeof(vec3_t));
-    if (!ball->vertices) {
-        perror("Failed to allocate vertices for soccer ball");
-        free(ball);
+    cube->num_vertices = 8;
+    cube->vertices = (vec3_t*)malloc(cube->num_vertices * sizeof(vec3_t));
+    if (!cube->vertices) {
+        perror("Failed to allocate vertices for cube");
+        free(cube);
         return NULL;
     }
 
-    // 12 vertices of an icosahedron
-    ball->vertices[0] = vec3_create(0.0f, a, b);
-    ball->vertices[1] = vec3_create(0.0f, a, -b);
-    ball->vertices[2] = vec3_create(0.0f, -a, b);
-    ball->vertices[3] = vec3_create(0.0f, -a, -b);
-    ball->vertices[4] = vec3_create(a, b, 0.0f);
-    ball->vertices[5] = vec3_create(a, -b, 0.0f);
-    ball->vertices[6] = vec3_create(-a, b, 0.0f);
-    ball->vertices[7] = vec3_create(-a, -b, 0.0f);
-    ball->vertices[8] = vec3_create(b, 0.0f, a);
-    ball->vertices[9] = vec3_create(b, 0.0f, -a);
-    ball->vertices[10] = vec3_create(-b, 0.0f, a);
-    ball->vertices[11] = vec3_create(-b, 0.0f, -a);
+    float half_size = size / 2.0f;
+    // Define vertices of a cube centered at origin
+    cube->vertices[0] = vec3_create(-half_size, -half_size, -half_size); // 0: FBL (Front Bottom Left)
+    cube->vertices[1] = vec3_create( half_size, -half_size, -half_size); // 1: FBR
+    cube->vertices[2] = vec3_create( half_size,  half_size, -half_size); // 2: FTR
+    cube->vertices[3] = vec3_create(-half_size,  half_size, -half_size); // 3: FTL
+    cube->vertices[4] = vec3_create(-half_size, -half_size,  half_size); // 4: BBL
+    cube->vertices[5] = vec3_create( half_size, -half_size,  half_size); // 5: BBR
+    cube->vertices[6] = vec3_create( half_size,  half_size,  half_size); // 6: BTR
+    cube->vertices[7] = vec3_create(-half_size,  half_size,  half_size); // 7: BTL
 
-    ball->num_edges = 30; // 30 edges for a regular icosahedron
-    ball->edges = (edge_t*)malloc(ball->num_edges * sizeof(edge_t));
-    if (!ball->edges) {
-        perror("Failed to allocate edges for soccer ball");
-        free(ball->vertices);
-        free(ball);
+    cube->num_edges = 12; // (Not strictly used by face renderer, but keeping structure)
+    cube->edges = (edge_t*)malloc(cube->num_edges * sizeof(edge_t));
+    if (!cube->edges) {
+        perror("Failed to allocate edges for cube");
+        free(cube->vertices);
+        free(cube);
         return NULL;
     }
 
-    // 30 edges connecting the vertices to form the icosahedron wireframe
-    ball->edges[0] = (edge_t){0, 4};
-    ball->edges[1] = (edge_t){0, 6};
-    ball->edges[2] = (edge_t){0, 8};
-    ball->edges[3] = (edge_t){0, 10};
-    ball->edges[4] = (edge_t){1, 4};
-    ball->edges[5] = (edge_t){1, 6};
-    ball->edges[6] = (edge_t){1, 9};
-    ball->edges[7] = (edge_t){1, 11};
-    ball->edges[8] = (edge_t){2, 5};
-    ball->edges[9] = (edge_t){2, 7};
-    ball->edges[10] = (edge_t){2, 8};
-    ball->edges[11] = (edge_t){2, 10};
-    ball->edges[12] = (edge_t){3, 5};
-    ball->edges[13] = (edge_t){3, 7};
-    ball->edges[14] = (edge_t){3, 9};
-    ball->edges[15] = (edge_t){3, 11};
-    ball->edges[16] = (edge_t){4, 5};
-    ball->edges[17] = (edge_t){4, 9};
-    ball->edges[18] = (edge_t){5, 8};
-    ball->edges[19] = (edge_t){6, 7};
-    ball->edges[20] = (edge_t){6, 11};
-    ball->edges[21] = (edge_t){7, 10};
-    ball->edges[22] = (edge_t){8, 9};
-    ball->edges[23] = (edge_t){8, 10};
-    ball->edges[24] = (edge_t){9, 11};
-    ball->edges[25] = (edge_t){10, 11};
-    // Additional edges to complete the icosahedron, ensuring all vertices have 5 connections
-    ball->edges[26] = (edge_t){0, 1}; // Connects top points
-    ball->edges[27] = (edge_t){0, 2}; // Connects top to bottom pentagon
-    ball->edges[28] = (edge_t){1, 3}; // Connects top to bottom pentagon
-    ball->edges[29] = (edge_t){2, 3}; // Connects bottom points
+    // Cube edges (12 edges connecting the vertices)
+    cube->edges[0] = (edge_t){0, 1}; cube->edges[1] = (edge_t){1, 2};
+    cube->edges[2] = (edge_t){2, 3}; cube->edges[3] = (edge_t){3, 0};
+    cube->edges[4] = (edge_t){4, 5}; cube->edges[5] = (edge_t){5, 6};
+    cube->edges[6] = (edge_t){6, 7}; cube->edges[7] = (edge_t){7, 4};
+    cube->edges[8] = (edge_t){0, 4}; cube->edges[9] = (edge_t){1, 5};
+    cube->edges[10] = (edge_t){2, 6}; cube->edges[11] = (edge_t){3, 7};
 
-    printf("Generated soccer ball model with %d vertices and %d edges.\n", ball->num_vertices, ball->num_edges);
-    return ball;
+    cube->num_faces = 12; // 6 cube faces * 2 triangles/face
+    cube->faces = (face_t*)malloc(cube->num_faces * sizeof(face_t));
+    if (!cube->faces) {
+        perror("Failed to allocate faces for cube");
+        free(cube->edges);
+        free(cube->vertices);
+        free(cube);
+        return NULL;
+    }
+
+    // Front face (Z-)
+    cube->faces[0] = (face_t){0, 1, 2};
+    cube->faces[1] = (face_t){0, 2, 3};
+    // Back face (Z+)
+    cube->faces[2] = (face_t){4, 6, 5}; // Note vertex order for normal
+    cube->faces[3] = (face_t){4, 7, 6};
+    // Left face (X-)
+    cube->faces[4] = (face_t){0, 3, 7};
+    cube->faces[5] = (face_t){0, 7, 4};
+    // Right face (X+)
+    cube->faces[6] = (face_t){1, 5, 6};
+    cube->faces[7] = (face_t){1, 6, 2};
+    // Bottom face (Y-)
+    cube->faces[8] = (face_t){0, 4, 5};
+    cube->faces[9] = (face_t){0, 5, 1};
+    // Top face (Y+)
+    cube->faces[10] = (face_t){3, 2, 6};
+    cube->faces[11] = (face_t){3, 6, 7};
+    
+    // Edges are no longer strictly necessary for face-based rendering
+    // Reset num_edges and edges to NULL if you don't intend to render them as wireframe explicitly.
+    // However, if your render_wireframe function still iterates edges, keep them.
+    // Based on the new renderer.c, it iterates faces, so these can be zeroed out.
+    // cube->num_edges = 0;
+    // cube->edges = NULL;
+
+    return cube;
 }
 
-// Function to destroy a model and free its allocated memory
-void destroy_model(model_t* model) {
+// Function to free model memory
+void free_model(model_t* model) {
     if (model) {
         if (model->vertices) {
             free(model->vertices);
@@ -167,97 +111,148 @@ void destroy_model(model_t* model) {
             free(model->edges);
             model->edges = NULL;
         }
+        if (model->faces) { // NEW: Free faces
+            free(model->faces);
+            model->faces = NULL;
+        }
         free(model);
         model = NULL;
     }
 }
 
 
-// --- Main Demo Function ---
+int main() {
+    printf("main2.c: Starting animation rendering...\n"); // Debug print
 
-int main(){
-    printf("--- main2.c: Starting Task 3 Demo ---\n"); // Debug print
+    // Canvas dimensions
+    const int WIDTH = 800;
+    const int HEIGHT = 600;
+    const int NUM_FRAMES = 360; // Total frames for one animation cycle
 
-    int width = 600;
-    int height = 600;
-
-    printf("main2.c: Creating canvas...\n"); // Debug print
-    canvas_t* my_canvas = canvas_create(width, height);
-    if(!my_canvas){
-        fprintf(stderr, "main2.c: Failed to create canvas in main.\n"); // Debug print
-        return 1;
+    // Create the canvas
+    canvas_t* my_canvas = canvas_create(WIDTH, HEIGHT);
+    if (!my_canvas) {
+        return EXIT_FAILURE;
     }
-    printf("main2.c: Canvas created.\n"); // Debug print
 
-    // Generate the 3D model (changed to generate_soccer_ball())
-    model_t* my_model = generate_soccer_ball(); // <-- Now exclusively calls generate_soccer_ball()
-    if (!my_model) {
-        fprintf(stderr, "main2.c: Failed to generate 3D model.\n"); // Debug print
+    // Ensure 'frames' directory exists (create it manually or add system call)
+
+    // --- Scene Setup ---
+
+    // 1. Define Camera (View Matrix)
+    // Move the camera back along the Z-axis to see the scene
+    vec3_t camera_position = vec3_create(0.0f, 0.0f, -5.0f); // Camera is at (0,0,-5) looking towards origin
+    mat4_t view_matrix = mat4_translate(vec3_negate(&camera_position)); // Translate scene by negative camera position
+
+    // 2. Define Projection Matrix (Perspective Projection)
+    float aspect_ratio = (float)WIDTH / HEIGHT;
+    float fov_y = 60.0f * DEG_TO_RAD; // 60 degrees Field of View in Y
+    float near_plane = 0.1f;
+    float far_plane = 100.0f;
+    mat4_t projection_matrix = mat4_perspective(fov_y, aspect_ratio, near_plane, far_plane);
+
+    light_source_t main_light = {
+    .position = vec3_create(0.0f, 5.0f, -5.0f),
+    .intensity = 1.0f // Set a default intensity (e.g., 1.0f for full brightness)
+    };
+
+    // 3. Define Models (Two Planets)
+    model_t* planet_model_1 = generate_cube(0.4f); // First planet
+    model_t* planet_model_2 = generate_cube(0.2f); // Second, smaller planet
+    
+    if (!planet_model_1 || !planet_model_2) {
         canvas_destroy(my_canvas);
-        return 1;
+        free_model(planet_model_1); 
+        free_model(planet_model_2);
+        return EXIT_FAILURE;
     }
-    printf("main2.c: Model generated.\n"); // Debug print
 
-    // --- Set up Camera and Projection ---
-    // View Matrix: Position the camera. Your mat4_translate returns a mat4_t by value.
-    mat4_t view_matrix = mat4_translate(0.0f, 0.0f, -3.0f); // Correct for your math3d.h
+    // 4. Define Planet 1 Orbital Path (Bézier Control Points)
+    // Larger orbit
+    vec3_t orbit1_p0 = vec3_create( 2.5f, 0.0f,  0.0f);
+    vec3_t orbit1_p1 = vec3_create( 3.5f, 1.0f, -1.5f);
+    vec3_t orbit1_p2 = vec3_create(-1.0f, 2.5f,  1.5f);
+    vec3_t orbit1_p3 = vec3_create(-2.5f, 0.0f,  0.0f);
+    vec3_t orbit1_p4 = vec3_create(-3.5f, -1.0f, 1.5f);
+    vec3_t orbit1_p5 = vec3_create( 1.0f, -2.5f, -1.5f);
 
-    // Projection Matrix: Define the viewing frustum.
-    float aspect_ratio = (float)width / height;
-    float fov_y_rad = 60.0f * DEG_TO_RAD; // 60 degrees Field of View in Y direction
-    float near_plane = 0.1f;             // Near clipping plane
-    float far_plane = 100.0f;            // Far clipping plane
-
-    // Calculate frustum parameters
-    float top_val = tanf(fov_y_rad / 2.0f) * near_plane;
-    float bottom_val = -top_val;
-    float right_val = top_val * aspect_ratio;
-    float left_val = -right_val;
-
-    // Your mat4_frustum_asymmetric returns a mat4_t by value.
-    mat4_t projection_matrix = mat4_frustum_asymmetric(left_val, right_val, bottom_val, top_val, near_plane, far_plane);
+    // 5. Define Planet 2 Orbital Path (Bézier Control Points)
+    // Smaller, slightly offset orbit
+    vec3_t orbit2_p0 = vec3_create( 1.5f, 0.0f,  0.5f);
+    vec3_t orbit2_p1 = vec3_create( 1.0f, 1.0f, -0.5f);
+    vec3_t orbit2_p2 = vec3_create(-0.5f, 1.5f,  0.5f);
+    vec3_t orbit2_p3 = vec3_create(-1.5f, 0.0f,  0.5f);
+    vec3_t orbit2_p4 = vec3_create(-1.0f, -1.0f, -0.5f);
+    vec3_t orbit2_p5 = vec3_create( 0.5f, -1.5f,  0.5f);
 
     // --- Animation Loop ---
-    int num_frames = 60; // For a smooth rotation (e.g., 2 seconds at 30fps)
-    float rotation_speed_degrees_per_frame = 360.0f / num_frames; // Full rotation in one loop
+    for (int frame = 0; frame < NUM_FRAMES; ++frame) {
+        canvas_clear(my_canvas, 0.0f); // Clear canvas to black (0.0f intensity)
+        canvas_clear_depth(my_canvas, 1.0f); // NEW: Clear depth buffer to 'far' (1.0) for each frame
 
-    printf("main2.c: Starting animation rendering for %d frames...\n", num_frames); // Debug print
-    for (int frame = 0; frame < num_frames; ++frame) {
-        printf("main2.c: Rendering frame %d...\n", frame); // Debug print per frame
-        canvas_clear(my_canvas, 0.0f); // Clear canvas to black for each frame
+        float animation_t = (float)frame / (NUM_FRAMES - 1); // 0.0 to 1.0 over the animation
 
-        float angle_rad = frame * rotation_speed_degrees_per_frame * DEG_TO_RAD;
+        // --- Planet 1 Model ---
+        mat4_t planet1_model_matrix = mat4_identity();
 
-        // Model Matrix: Translate, Scale, Rotate the object.
-        // Start with identity. Your mat4_identity returns a mat4_t by value.
-        mat4_t model_matrix = mat4_identity();
+        vec3_t planet1_position;
+        if (animation_t < 0.5f) { // First half of the orbit
+            float segment_t = animation_t * 2.0f; // Scale t to 0.0-1.0 for this segment
+            planet1_position = vec3_bezier_cubic(segment_t, orbit1_p0, orbit1_p1, orbit1_p2, orbit1_p3);
+        } else { // Second half of the orbit
+            float segment_t = (animation_t - 0.5f) * 2.0f; // Scale t to 0.0-1.0 for this segment
+            planet1_position = vec3_bezier_cubic(segment_t, orbit1_p3, orbit1_p4, orbit1_p5, orbit1_p0); // Back to P0
+        }
+        
+        mat4_t planet1_translation = mat4_translate(planet1_position);
+        planet1_model_matrix = mat4_multiply(&planet1_model_matrix, &planet1_translation);
 
-        // Create the rotation matrix. Your mat4_rotate_xyz returns a mat4_t by value.
-        mat4_t rotation_matrix = mat4_rotate_xyz(0.0f, angle_rad, 0.0f);
+        float planet1_spin_angle = animation_t * TWO_PI * 5; // Spin 5 times faster
+        mat4_t planet1_local_rotation = mat4_rotate_xyz(planet1_spin_angle, 0.0f, 0.0f);
+        planet1_model_matrix = mat4_multiply(&planet1_model_matrix, &planet1_local_rotation);
+        
+        render_wireframe(my_canvas, planet_model_1, planet1_model_matrix, view_matrix, projection_matrix, &main_light);
 
-        // Multiply the current model_matrix by the rotation_matrix.
-        // Your mat4_multiply takes pointers to const mat4_t and returns a mat4_t by value.
-        model_matrix = mat4_multiply(&model_matrix, &rotation_matrix);
 
-        // Render the wireframe for the current frame
-        render_wireframe(my_canvas, my_model, model_matrix, view_matrix, projection_matrix);
+        // --- Planet 2 Model ---
+        mat4_t planet2_model_matrix = mat4_identity();
+        
+        // Offset the animation_t for the second planet to make it asynchronous
+        float animation_t_offset = fmodf(animation_t + 0.25f, 1.0f); // Start 1/4 of the way through
+        vec3_t planet2_position;
+        if (animation_t_offset < 0.5f) { // First half of the orbit
+            float segment_t = animation_t_offset * 2.0f;
+            planet2_position = vec3_bezier_cubic(segment_t, orbit2_p0, orbit2_p1, orbit2_p2, orbit2_p3);
+        } else { // Second half of the orbit
+            float segment_t = (animation_t_offset - 0.5f) * 2.0f;
+            planet2_position = vec3_bezier_cubic(segment_t, orbit2_p3, orbit2_p4, orbit2_p5, orbit2_p0);
+        }
+        
+        mat4_t planet2_translation = mat4_translate(planet2_position);
+        planet2_model_matrix = mat4_multiply(&planet2_model_matrix, &planet2_translation);
+
+        float planet2_spin_angle = animation_t_offset * TWO_PI * 3; // Spin 3 times
+        mat4_t planet2_local_rotation = mat4_rotate_xyz(0.0f, planet2_spin_angle, 0.0f);
+        planet2_model_matrix = mat4_multiply(&planet2_model_matrix, &planet2_local_rotation);
+        
+        render_wireframe(my_canvas, planet_model_2, planet2_model_matrix, view_matrix, projection_matrix, &main_light);
+
 
         // Save frame to PGM
         char filename[256];
-        sprintf(filename, "frames/frame_%04d.pgm", frame); // Ensure this path matches your 'frames' directory location
+        sprintf(filename, "frames/frame_%04d.pgm", frame);
         if (canvas_save_to_pgm(my_canvas, filename) != 0) {
-            fprintf(stderr, "main2.c: Failed to save frame %d to %s.\n", frame, filename); // Debug print
+            fprintf(stderr, "main2.c: Failed to save frame %d to %s.\n", frame, filename);
             break;
         }
-        printf("main2.c: Frame %d saved to %s.\n", frame, filename); // Debug print
+        printf("main2.c: Frame %d saved to %s.\n", frame, filename);
     }
 
-    printf("main2.c: Animation rendering finished. Cleaning up...\n"); // Debug print
-    // Clean up allocated memory for the model and canvas
-    destroy_model(my_model);
+    printf("main2.c: Animation rendering finished. Cleaning up...\n");
+    // Clean up allocated memory
+    free_model(planet_model_1);
+    free_model(planet_model_2);
     canvas_destroy(my_canvas);
 
-    printf("--- main2.c: Demo finished. ---\n"); // Debug print
-
-    return 0;
+    return EXIT_SUCCESS;
 }

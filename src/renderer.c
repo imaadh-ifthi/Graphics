@@ -1,187 +1,175 @@
 #include "renderer.h"
 #include <stdio.h>
-#include <stdlib.h> // For malloc, free, and qsort
-#include <stdbool.h> // For boolean type
+#include <stdlib.h>   // For malloc, free, and qsort
+#include <stdbool.h>  // For boolean type
 
 // --- Internal Helper Structs and Functions ---
 
 // A temporary structure to hold a line that's ready to be drawn.
 // We'll use this for depth sorting.
 typedef struct {
-    vec3_t p1; // Projected start point (in screen space)
-    vec3_t p2; // Projected end point (in screen space)
-    float avg_z; // Average depth of the line, for sorting
+    vec3_t p1_screen; // Projected start point (in screen space)
+    vec3_t p2_screen; // Projected end point (in screen space)
+    float avg_z;     // Average depth of the line, for sorting
+    float intensity; // Intensity after lighting calculation
 } line_to_draw_t;
 
 // Comparison function for qsort. Sorts lines from back to front (larger Z to smaller Z).
+// This ensures that closer lines are drawn last, correctly overwriting more distant ones
+// if depth testing wasn't perfectly handling overlapping lines.
+// However, with canvas_put_pixel_f, depth testing is handled at the pixel level.
+// This sort is still useful for consistency and potential future optimizations (like early-z reject).
 int compare_lines_by_depth(const void* a, const void* b) {
     const line_to_draw_t* line_a = (const line_to_draw_t*)a;
     const line_to_draw_t* line_b = (const line_to_draw_t*)b;
-    if (line_a->avg_z < line_b->avg_z) return 1;
-    if (line_a->avg_z > line_b->avg_z) return -1;
+    if (line_a->avg_z < line_b->avg_z) return 1; // 'a' is farther, so sort it before 'b'
+    if (line_a->avg_z > line_b->avg_z) return -1; // 'a' is closer, so sort it after 'b'
     return 0;
 }
 
-// Checks if a pixel coordinate is inside a circular viewport.
-// This is our clipping function as per the PDF.
-bool clip_to_circular_viewport(int px, int py, int width, int height) {
-    float center_x = width / 2.0f;
-    float center_y = height / 2.0f;
-    float radius = (width < height ? width : height) / 2.0f;
-    
-    float dist_from_center = sqrtf(powf(px - center_x, 2) + powf(py - center_y, 2));
-    
-    return dist_from_center <= radius;
-}
-
-// Takes a 3D vertex and applies the full transformation pipeline to get a 2D screen coordinate.
-vec3_t project_vertex(vec3_t vertex, mat4_t mvp_matrix, int canvas_width, int canvas_height) {
-    // 1. Apply the combined Model-View-Projection matrix to the world space vertex.
-    // Use mat4_transform_point which takes a pointer to the matrix and a pointer to the vec3.
-    vec3_t transformed_vertex = mat4_transform_point(&mvp_matrix, &vertex);
-
-    // 2. Perform the Viewport Transform.
-    // The result from the projection matrix is in "Normalized Device Coordinates" (NDC),
-    // which range from -1 to +1 on x and y. We need to map this to our screen pixels.
-    vec3_t screen_vertex;
-    screen_vertex.x = (transformed_vertex.x + 1.0f) * 0.5f * canvas_width;
-    screen_vertex.y = (1.0f - transformed_vertex.y) * 0.5f * canvas_height; // Y is inverted because screen coords start from top-left.
-    screen_vertex.z = transformed_vertex.z; // Keep the z-value! We need it for depth sorting.
-    // Update spherical coordinates for the screen_vertex as well, although for 2D screen coords,
-    // only x, y, and z (for depth) are typically used.
-    
-    //vec3_update_spherical(&screen_vertex); removed for task3
-
-    return screen_vertex;
-}
-
-// --- The Main Rendering Function ---
-
-void render_wireframe(canvas_t* canvas, const model_t* model, mat4_t model_matrix, mat4_t view_matrix, mat4_t projection_matrix) {
-    if (!canvas || !model) {
+/**
+ * @brief Renders a 3D model as a wireframe onto the canvas with lighting and depth testing.
+ * @param canvas A pointer to the canvas to draw on.
+ * @param model A pointer to the 3D model to render.
+ * @param model_matrix The model transformation matrix.
+ * @param view_matrix The view transformation matrix.
+ * @param projection_matrix The projection matrix.
+ * @param light A pointer to the light source for lighting calculations.
+ */
+void render_wireframe(
+    canvas_t* canvas,
+    const model_t* model,
+    mat4_t model_matrix,
+    mat4_t view_matrix,
+    mat4_t projection_matrix,
+    const light_source_t* light // NEW parameter
+) {
+    if (!canvas || !model || !model->vertices || !model->faces) { // Check for faces too
+        fprintf(stderr, "Error: Invalid canvas or model for rendering.\n");
         return;
     }
 
-    // Combine matrices for efficiency. Order is crucial!
-    // Final Vertex = Projection * View * Model * Original Vertex
-    // Pass addresses of the matrices to mat4_multiply
-    mat4_t mv_matrix = mat4_multiply(&view_matrix, &model_matrix);
-    mat4_t mvp_matrix = mat4_multiply(&projection_matrix, &mv_matrix);
+    // Combine matrices: Projection * View * Model
+    mat4_t mvp_matrix = mat4_multiply(&projection_matrix, &view_matrix);
+    mvp_matrix = mat4_multiply(&mvp_matrix, &model_matrix);
 
-    // Step 1: Project all vertices from 3D space to 2D screen space.
-    vec3_t* projected_vertices = (vec3_t*)malloc(model->num_vertices * sizeof(vec3_t));
-    if (!projected_vertices) {
-        perror("Failed to allocate memory for projected_vertices");
+    // For lighting calculations, we need the inverse of the model-view matrix
+    // to transform normals from model space to view space.
+    // Assuming model_matrix is applied first, then view_matrix.
+    mat4_t model_view_matrix = mat4_multiply(&view_matrix, &model_matrix);
+
+    // Allocate space for projected points and lines to draw (for depth sorting)
+    // We'll store lines for faces, not edges directly.
+    line_to_draw_t* lines_to_draw = (line_to_draw_t*)malloc(model->num_faces * 3 * sizeof(line_to_draw_t)); // 3 edges per face
+    if (!lines_to_draw) {
+        perror("Failed to allocate lines_to_draw buffer");
         return;
     }
+    int current_line_count = 0;
 
-    for (int i = 0; i < model->num_vertices; i++) {
-        projected_vertices[i] = project_vertex(model->vertices[i], mvp_matrix, canvas->width, canvas->height);
-    }
+    // Iterate through each face to calculate lighting and project vertices
+    for (int i = 0; i < model->num_faces; ++i) {
+        face_t face = model->faces[i];
+        vec3_t v0 = model->vertices[face.v1_index];
+        vec3_t v1 = model->vertices[face.v2_index];
+        vec3_t v2 = model->vertices[face.v3_index];
 
-    // Step 2: Create a list of lines to be drawn, with their depth.
-    line_to_draw_t* lines = (line_to_draw_t*)malloc(model->num_edges * sizeof(line_to_draw_t));
-    if (!lines) {
-        perror("Failed to allocate memory for lines");
-        free(projected_vertices); // Clean up previously allocated memory
-        return;
-    }
+        // --- Back-face culling ---
+        // Transform vertices to view space for normal calculation and culling
+        vec3_t v0_view = mat4_multiply_vec3(&model_view_matrix, v0);
+        vec3_t v1_view = mat4_multiply_vec3(&model_view_matrix, v1);
+        vec3_t v2_view = mat4_multiply_vec3(&model_view_matrix, v2);
 
-    for (int i = 0; i < model->num_edges; i++) {
-        int v1_index = model->edges[i].v1_index;
-        int v2_index = model->edges[i].v2_index;
-        
-        // Ensure indices are valid
-        if (v1_index < 0 || v1_index >= model->num_vertices ||
-            v2_index < 0 || v2_index >= model->num_vertices) {
-            fprintf(stderr, "Warning: Invalid vertex index encountered in edge %d. Skipping line.\n", i);
-            continue; 
+        // Calculate face normal in view space
+        vec3_t edge1_view = vec3_subtract(&v1_view, &v0_view);
+        vec3_t edge2_view = vec3_subtract(&v2_view, &v0_view);
+        vec3_t temp_cross_product = vec3_cross(&edge1_view, &edge2_view); // Store the result of cross product
+        vec3_t face_normal_view = vec3_normalize_fast(&temp_cross_product); // Now take the address of the lvalue
+
+        // View direction (from surface to camera) is approximately -vertex_position_in_view_space
+        // For orthographic camera or distant objects, it's often simpler to assume (0,0,1) for -Z axis camera
+        // For perspective, view_direction = vec3_normalize_fast(&vec3_negate(&v0_view));
+        // However, for back-face culling, just check Z component of normal or dot product with camera forward
+        // In view space, camera is typically at origin looking down -Z. So normal.z > 0 means facing away.
+        if (face_normal_view.z > 0.0f) { // Simple back-face culling: if normal points towards +Z (away from camera)
+             continue; // Cull this face
         }
 
-        lines[i].p1 = projected_vertices[v1_index];
-        lines[i].p2 = projected_vertices[v2_index];
-        
-        // Calculate average depth for sorting (Painter's Algorithm)
-        lines[i].avg_z = (lines[i].p1.z + lines[i].p2.z) / 2.0f;
+        // --- Lighting Calculation ---
+        // Light direction from surface to light source, in view space
+        vec3_t light_pos_view = mat4_multiply_vec3(&view_matrix, light->position); // Transform light position to view space
+        vec3_t temp_light_dir = vec3_subtract(&light_pos_view, &v0_view); // Store the result of subtraction
+        vec3_t light_dir_from_surface_view = vec3_normalize_fast(&temp_light_dir); // Now take the address of the lvalue
+
+        float diffuse_intensity = calculate_diffuse_intensity(&face_normal_view, &light_dir_from_surface_view);
+        float line_intensity = diffuse_intensity; // Use diffuse intensity for line color
+
+        // Project vertices of the current face
+        vec3_t proj_v0 = mat4_multiply_vec3(&mvp_matrix, v0);
+        vec3_t proj_v1 = mat4_multiply_vec3(&mvp_matrix, v1);
+        vec3_t proj_v2 = mat4_multiply_vec3(&mvp_matrix, v2);
+
+        // Convert to screen coordinates
+        // Remember NDC x, y from -1 to 1, Z from 0 to 1 (or -1 to 1)
+        // Screen X = (NDC.x + 1) * 0.5 * width
+        // Screen Y = (1 - NDC.y) * 0.5 * height (assuming Y-down screen coords)
+        // Screen Z = (NDC.z + 1) * 0.5 (or just use NDC.z if it's already 0-1)
+
+        vec3_t screen_v0 = vec3_create(
+            (proj_v0.x + 1.0f) * 0.5f * canvas->width,
+            (1.0f - (proj_v0.y + 1.0f) * 0.5f) * canvas->height, // Invert Y for screen coords
+            proj_v0.z // Z is already in NDC [0,1] or [-1,1] - keep as is for depth test
+        );
+        vec3_t screen_v1 = vec3_create(
+            (proj_v1.x + 1.0f) * 0.5f * canvas->width,
+            (1.0f - (proj_v1.y + 1.0f) * 0.5f) * canvas->height,
+            proj_v1.z
+        );
+        vec3_t screen_v2 = vec3_create(
+            (proj_v2.x + 1.0f) * 0.5f * canvas->width,
+            (1.0f - (proj_v2.y + 1.0f) * 0.5f) * canvas->height,
+            proj_v2.z
+        );
+
+        // Store the three edges of the face for depth sorting
+        // Edge 1 (v0-v1)
+        lines_to_draw[current_line_count].p1_screen = screen_v0;
+        lines_to_draw[current_line_count].p2_screen = screen_v1;
+        lines_to_draw[current_line_count].avg_z = (proj_v0.z + proj_v1.z) / 2.0f;
+        lines_to_draw[current_line_count].intensity = line_intensity;
+        current_line_count++;
+
+        // Edge 2 (v1-v2)
+        lines_to_draw[current_line_count].p1_screen = screen_v1;
+        lines_to_draw[current_line_count].p2_screen = screen_v2;
+        lines_to_draw[current_line_count].avg_z = (proj_v1.z + proj_v2.z) / 2.0f;
+        lines_to_draw[current_line_count].intensity = line_intensity;
+        current_line_count++;
+
+        // Edge 3 (v2-v0)
+        lines_to_draw[current_line_count].p1_screen = screen_v2;
+        lines_to_draw[current_line_count].p2_screen = screen_v0;
+        lines_to_draw[current_line_count].avg_z = (proj_v2.z + proj_v0.z) / 2.0f;
+        lines_to_draw[current_line_count].intensity = line_intensity;
+        current_line_count++;
     }
 
-    // Step 3: Sort the lines from back to front based on their average depth.
-    qsort(lines, model->num_edges, sizeof(line_to_draw_t), compare_lines_by_depth);
+    // Sort lines by their average Z-depth (back to front) for correct rendering order
+    qsort(lines_to_draw, current_line_count, sizeof(line_to_draw_t), compare_lines_by_depth);
 
-    // Step 4: Draw the sorted lines.
-    // The intensity for the lines can be set to a constant or passed as a parameter.
-    // For now, we'll use a constant intensity.
-    float line_intensity = 1.0f; 
-    float line_thickness = 1.0f; // You might want to make this configurable too
-
-    for (int i = 0; i < model->num_edges; i++) {
-        line_to_draw_t line = lines[i];
-        
-        // Use draw_line_f which handles the DDA algorithm and thickness.
-        // It's generally better to let draw_line_f handle the pixel iteration and clipping logic if possible,
-        // or ensure that draw_line_f has an internal clipping mechanism.
-        // For simple circular clipping, we'll iterate and clip each pixel for now.
-
-        // Note: The current implementation of draw_line_f doesn't directly support per-pixel clipping 
-        // within its DDA loop that respects the circular viewport. 
-        // For a full robust solution, you'd integrate the clipping logic into draw_line_f or perform 
-        // line segment clipping *before* calling draw_line_f.
-        // For this fix, we'll call draw_line_f directly. The `clip_to_circular_viewport` function 
-        // as written is for individual pixels and isn't directly applied to the line drawing here.
-        // The project task for `clip_to_circular_viewport` is explicitly "Checks if a pixel is inside a circular drawing area".
-        // This implies it's used for *after* projection, before setting individual pixels.
-
-        // If you intend for `draw_line_f` to respect the circular viewport, you'd need to modify `draw_line_f`
-        // to call `clip_to_circular_viewport` for each pixel it calculates.
-        // For now, we'll assume `draw_line_f` draws the line, and we might visually see parts outside the circle
-        // if it doesn't internally clip. The task asks to clip to a circular viewport *in* `renderer.c`.
-        // A more correct approach for "clip to circular viewport(canvas, x, y)" in `render_wireframe` would be
-        // to pass the clipping function into `set_pixel_f` or modify `set_pixel_f` to use it.
-        // For simplicity and direct answer to errors, we will proceed assuming `set_pixel_f` is where the check should happen
-        // or that `draw_line_f` will call `set_pixel_f` which then checks for the canvas boundaries.
-        // However, `clip_to_circular_viewport` is designed for a post-projection check for drawing.
-
-        // To properly use clip_to_circular_viewport with draw_line_f, the best way would be to modify set_pixel_f
-        // or create a wrapper for set_pixel_f used by renderer that performs this check.
-
-        // Let's integrate it directly into `set_pixel_f` call for demonstration or modify `set_pixel_f` itself to take a clipping function.
-        // For this correction, let's keep `clip_to_circular_viewport` as a separate check for each pixel drawn *by the renderer*,
-        // rather than relying on `draw_line_f` which operates on a different level.
-        // The original `render_wireframe` loop for drawing lines was correct in principle for individual pixel checks.
-        
-        // Re-implementing the individual pixel drawing with clipping as it was conceptually correct for the task:
-        float dx = line.p2.x - line.p1.x;
-        float dy = line.p2.y - line.p1.y;
-        float steps = fabsf(dx) > fabsf(dy) ? fabsf(dx) : fabsf(dy);
-        if (steps == 0) { // Handle single points or no movement
-            if (clip_to_circular_viewport((int)line.p1.x, (int)line.p1.y, canvas->width, canvas->height)) {
-                // If thickness is desired for points, you might expand this.
-                set_pixel_f(canvas, line.p1.x, line.p1.y, line_intensity);
-            }
-            continue;
-        }
-
-        float x_inc = dx / steps;
-        float y_inc = dy / steps;
-
-        // Apply thickness by drawing multiple lines or expanding the pixel area.
-        // For wireframes, thickness is usually a visual embellishment.
-        // The task implies `draw_line_f` should handle thickness.
-        // So we will call `draw_line_f` and rely on its internal thickness implementation.
-        // The `clip_to_circular_viewport` function needs to be applied *within* set_pixel_f
-        // or draw_line_f to affect the actual pixels being drawn.
-        // Since `set_pixel_f` is called by `draw_line_f`, the best place for `clip_to_circular_viewport`
-        // is as an additional check in `set_pixel_f`. Let's assume `set_pixel_f` is modified
-        // to also perform this circular clip *if* needed by setting a flag or passing radius/center.
-
-        // For now, to make the wireframe draw and match the `draw_line_f` signature:
-        draw_line_f(canvas, line.p1.x, line.p1.y, line.p2.x, line.p2.y, line_thickness, line_intensity);
-        // The current `draw_line_f` and `set_pixel_f` do not use `clip_to_circular_viewport`.
-        // To fix this, `set_pixel_f` needs to be updated to check `clip_to_circular_viewport`.
-        // I'll provide the `set_pixel_f` modification in `canvas.c` next.
+    // Render sorted lines
+    for (int i = 0; i < current_line_count; ++i) {
+        // Pass the line's calculated intensity and depth to draw_line_f
+        // draw_line_f itself will use canvas_put_pixel_f which does the depth testing.
+        draw_line_f(
+            canvas,
+            lines_to_draw[i].p1_screen.x, lines_to_draw[i].p1_screen.y,
+            lines_to_draw[i].p2_screen.x, lines_to_draw[i].p2_screen.y,
+            1.0f, // Line thickness (can be adjusted)
+            lines_to_draw[i].intensity,
+            lines_to_draw[i].avg_z // Pass average depth for the line
+        );
     }
-    
-    // Clean up our temporary memory
-    free(projected_vertices);
-    free(lines);
+
+    free(lines_to_draw);
 }
