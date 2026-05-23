@@ -26,7 +26,7 @@ void render_cube_wireframe(canvas_t* canvas, const mat4_t* model_transform, floa
 
     // 1. Define View Matrix (Camera position and orientation)
     // Move the camera back along the Z-axis to see the cubes
-    mat4_t view_matrix = mat4_translate(0.0f, 0.0f, -5.0f); // Adjust as needed for visibility
+    mat4_t view_matrix = mat4_translate(vec3_create(0.0f, 0.0f, -5.0f)); // Adjust as needed for visibility
 
     // 2. Define Projection Matrix (using mat4_frustum_asymmetric via mat4_perspective)
     float fov_y = PI / 4.0f; // 45 degrees vertical FOV
@@ -98,8 +98,11 @@ void render_cube_wireframe(canvas_t* canvas, const mat4_t* model_transform, floa
         float y1_screen = (-ndc_v2.y * half_height) + half_height;
 
         // Draw the edge using draw_line_f
-        draw_line_f(canvas, x0_screen, y0_screen, x1_screen, y1_screen, line_intensity, 0.8f);
+        float line_intensity = 1.0f;
         float line_thickness = 5.0f;
+        float line_depth = 0.0f; // Added a placeholder for depth. Adjust this value as needed for your scene's depth.
+
+        draw_line_f(canvas, x0_screen, y0_screen, x1_screen, y1_screen, line_thickness, line_intensity, line_depth);
     }
 }
 
@@ -150,7 +153,7 @@ int main() {
 
     // Test Matrix Operations (Keep these tests from your original main if you want them printed)
     printf("\n=== Matrix Operations Tests ===\n");
-    mat4_t scale_mat = mat4_scale(2.0f, 0.5f, 1.0f);
+    mat4_t scale_mat = mat4_scale(vec3_create(2.0f, 0.5f, 1.0f));
     printf("Scale Matrix:\n");
     for (int i=0; i<16; ++i) { printf("%8.2f%s", scale_mat.m[i], (i+1)%4==0?"\n":""); }
 
@@ -165,7 +168,7 @@ int main() {
     // Buffer for unique filenames
     char filename[256];
 
-    mat4_t base_translate = mat4_translate(0.0f, 0.0f, 0.0f); // Cube initially at origin, camera will be moved back in render_cube_wireframe
+    mat4_t base_translate = mat4_translate(vec3_create(0.0f, 0.0f, 0.0f)); // Cube initially at origin, camera will be moved back in render_cube_wireframe
 
     printf("Visual Demo\n");
 
